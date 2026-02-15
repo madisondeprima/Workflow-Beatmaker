@@ -1,0 +1,807 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Workflow Beatmaker</title>
+  <style>
+    :root{
+      /* Casino / royal red background */
+      --bg: #7a0000;
+      --panel: #970000;
+      --panel2: #a80000;
+      --border: #1d0000;
+      --text: #000000;
+      --btn: #e6e6e6;
+      --btnHover: #d8d8d8;
+      --muted: rgba(0,0,0,.70);
+    }
+
+    * { box-sizing: border-box; }
+    body{
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+      margin: 0;
+      min-height: 100vh;
+      background: var(--bg);
+      color: var(--text);
+      padding: 20px;
+      display: flex;
+      align-items: flex-start;
+      justify-content: center;
+    }
+
+    .app{
+      width: min(1100px, 100%);
+      background: var(--panel);
+      border: 2px solid var(--border);
+      border-radius: 16px;
+      padding: 16px;
+      box-shadow: 0 10px 25px rgba(0,0,0,.25);
+    }
+
+    h1 { margin: 0 0 6px; font-size: 28px; letter-spacing: .2px; }
+    .meta { font-size: 12px; color: var(--muted); margin-bottom: 12px; }
+
+    .row { display: flex; gap: 8px; flex-wrap: wrap; align-items:center; }
+    button{
+      padding: 10px 12px;
+      font-size: 14px;
+      cursor: pointer;
+      background: var(--btn);
+      color: var(--text);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+    }
+    button:hover{ background: var(--btnHover); }
+    button:disabled{ opacity: .55; cursor: not-allowed; }
+
+    select{
+      padding: 10px 12px;
+      font-size: 14px;
+      background: var(--btn);
+      color: var(--text);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      min-width: 260px;
+    }
+    select:disabled{ opacity: .55; cursor: not-allowed; }
+
+    .card{
+      border: 2px solid var(--border);
+      border-radius: 14px;
+      padding: 12px;
+      margin-top: 12px;
+      background: var(--panel2);
+    }
+
+    .result { font-size: 16px; line-height: 1.4; }
+    .grid { display:grid; grid-template-columns: 1fr 1fr; gap:12px; }
+    @media (max-width: 900px){ .grid{ grid-template-columns: 1fr; } }
+
+    .log{
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 12px;
+      white-space: pre-wrap;
+      max-height: 320px;
+      overflow: auto;
+      background: rgba(255,255,255,.15);
+      border: 1px solid rgba(0,0,0,.35);
+      border-radius: 10px;
+      padding: 10px;
+    }
+
+    .counter{
+      font-weight: 700;
+      padding: 4px 10px;
+      border: 2px solid var(--border);
+      border-radius: 999px;
+      background: rgba(255,255,255,.15);
+    }
+    .disabled { opacity: .5; pointer-events: none; }
+
+    details{
+      border: 1px solid rgba(0,0,0,.35);
+      border-radius: 12px;
+      padding: 10px 12px;
+      background: rgba(255,255,255,.12);
+    }
+    details summary{
+      cursor: pointer;
+      font-weight: 700;
+    }
+    .explain p{ margin: 8px 0 0; }
+    .pill{
+      display:inline-block;
+      padding: 2px 8px;
+      border: 1px solid rgba(0,0,0,.45);
+      border-radius: 999px;
+      background: rgba(255,255,255,.15);
+      font-size: 12px;
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <h1>Workflow Beatmaker</h1>
+    <div class="meta">Flow: Choose Track Type → Curse Check → Mutation → (if needed) Target/Mix Curse → Power-Up → Next Room</div>
+
+    <div class="card row" aria-label="Guided mode">
+      <label style="display:flex; align-items:center; gap:10px;">
+        <input id="guidedToggle" type="checkbox" checked />
+        <strong>Guided mode</strong>
+      </label>
+      <span class="meta">Guided mode locks buttons to the correct order and enables one-button flow.</span>
+      <button id="nextStepBtn" onclick="nextStep()">Next Step</button>
+    </div>
+
+    <div class="card" id="hintBox" aria-label="Next step hint" style="background: rgba(255,255,255,.12);">
+      <div><strong>Next step:</strong> Choose a Track Type, then click “Set Track Type” (or press “Next Step”).</div>
+    </div>
+
+    <div class="card row" aria-label="Track type chooser">
+      <strong style="margin-right:6px;">Track Type:</strong>
+      <select id="trackTypeSelect" aria-label="Choose track type">
+        <option value="" selected disabled>Choose a track type...</option>
+      </select>
+      <button id="btnSetTrackType" onclick="setTrackType()">Set Track Type</button>
+      <span class="meta">Track type is chosen (not rolled).</span>
+    </div>
+
+    <div class="card row" aria-label="Roll buttons">
+      <button id="btnCurseCheck" onclick="rollCurseCheck()">Curse Check</button>
+      <button id="btnMutation" onclick="rollMutation()">Mutation</button>
+      <button id="btnTargetCurse" onclick="rollTargetCurse()">Target Curse</button>
+      <button id="btnMixCurse" onclick="rollMixCurse()">Mix Curse</button>
+      <button id="btnPowerUp" onclick="rollPowerUp()">Power-Up</button>
+      <button id="btnNextRoom" onclick="nextRoom()">Next Room</button>
+      <button id="btnClearLog" onclick="clearLog()">Clear Log</button>
+    </div>
+
+    <div class="card row" aria-label="Power ups">
+      <strong>Power-Ups:</strong>
+      <span class="counter" id="powerCount">0</span>
+      <button onclick="usePowerUp()" id="usePU">Use Power-Up</button>
+      <button onclick="gainPowerUp()">+1</button>
+      <button onclick="losePowerUp()">-1</button>
+      <span class="meta">One Power-Up per Room (soft rule)</span>
+    </div>
+
+    <div class="grid">
+      <div class="card">
+        <div class="result" id="result">Start your run. Enter Room 1.</div>
+        <div class="meta" id="meta"></div>
+
+        <div style="margin-top:10px; display:grid; gap:10px;">
+          <details id="mutationDetails" class="explain" open>
+            <summary>Mutation explanation</summary>
+            <div id="mutationExplain"><p class="meta">Roll a mutation to see an explanation here.</p></div>
+          </details>
+
+          <details id="curseDetails" class="explain" open>
+            <summary>Curse explanation</summary>
+            <div id="curseExplain"><p class="meta">Roll a curse (Curse Check / Target Curse / Mix Curse) to see an explanation here.</p></div>
+          </details>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3 style="margin:0 0 8px;">Rules Reference</h3>
+        <div class="meta">Detailed descriptions for what each roll means. Expand sections as needed.</div>
+
+        <details open>
+          <summary>Core flow</summary>
+          <div style="margin-top:8px;">
+            <p><strong>1) Choose Track Type</strong> (player choice). This is your intent for the Room.</p>
+            <p><strong>2) Roll Curse Check</strong> (random). If it says <em>Target</em> or <em>Mix</em>, roll that curse next.</p>
+            <p><strong>3) Roll Mutation</strong> (random). Apply the constraint while building that Room’s track.</p>
+            <p><strong>4) Roll Power-Up</strong> (optional/random). Track your Power-Ups and spend at most one per Room.</p>
+          </div>
+        </details>
+
+        <details>
+          <summary>Track Type (chosen)</summary>
+          <div style="margin-top:8px;">
+            <p><strong>Track Type is the only thing you choose.</strong> It sets the role of what you’re making this Room (drums, bass, chords, etc.).</p>
+            <p>Everything else (curses, mutations, power-ups) is determined by rolls.</p>
+          </div>
+        </details>
+
+        <details>
+          <summary>Curse Check (random)</summary>
+          <div id="rulesCurseCheck" style="margin-top:8px;"></div>
+        </details>
+
+        <details>
+          <summary>Mutations (random)</summary>
+          <div class="meta">A mutation is a constraint on how you make the current Room’s track.</div>
+          <div id="rulesMutations" style="margin-top:8px;"></div>
+        </details>
+
+        <details>
+          <summary>Target Curses (random)</summary>
+          <div class="meta">Target curses affect one specific track.</div>
+          <div id="rulesTargetCurses" style="margin-top:8px;"></div>
+        </details>
+
+        <details>
+          <summary>Mix Curses (random)</summary>
+          <div class="meta">Mix curses affect the whole project/workflow.</div>
+          <div id="rulesMixCurses" style="margin-top:8px;"></div>
+        </details>
+
+        <details>
+          <summary>Power-Ups (random)</summary>
+          <div style="margin-top:8px;">
+            <p><strong>Power-Ups are a limited resource.</strong> Track them with the counter.</p>
+            <ul style="margin:6px 0 0 18px;">
+              <li>You can gain Power-Ups by rolling them or using the +1/-1 buttons.</li>
+              <li>Suggested rule: <strong>use at most one Power-Up per Room</strong> (this app tracks that).</li>
+              <li>When you use one, apply the effect per your table/rules (this app logs the use).</li>
+            </ul>
+          </div>
+        </details>
+      </div>
+
+      <div class="card">
+        <h3 style="margin:0 0 8px;">Run Log</h3>
+        <div class="log" id="log"></div>
+      </div>
+    </div>
+  </div>
+
+<script>
+let room = 1;
+let powerUps = 0;
+let usedThisRoom = false;
+let chosenTrackType = "";
+
+/* Guided flow state machine */
+const STEP = Object.freeze({
+  PICK_TRACK: "PICK_TRACK",
+  CURSE_CHECK: "CURSE_CHECK",
+  TARGET_CURSE: "TARGET_CURSE",
+  MIX_CURSE: "MIX_CURSE",
+  MUTATION: "MUTATION",
+  POWER_UP: "POWER_UP",
+  NEXT_ROOM_READY: "NEXT_ROOM_READY",
+});
+let step = STEP.PICK_TRACK;
+let lastCurseCheck = null;
+
+function guidedOn(){
+  const t = document.getElementById("guidedToggle");
+  return t ? t.checked : false;
+}
+function setHint(html){
+  const box = document.getElementById("hintBox");
+  if (box) box.innerHTML = `<div><strong>Next step:</strong> ${html}</div>`;
+}
+function applyGuidedLocks(){
+  if (!guidedOn()){
+    // Everything unlocked (except "Use Power-Up" which is always limited)
+    ["btnSetTrackType","btnCurseCheck","btnMutation","btnTargetCurse","btnMixCurse","btnPowerUp","btnNextRoom","trackTypeSelect"]
+      .forEach(id => { const el=document.getElementById(id); if(el) el.disabled = false; });
+    const ns = document.getElementById("nextStepBtn"); if (ns) ns.disabled = false;
+    updatePU();
+    setHint('Do whatever you want (guided mode is off).');
+    return;
+  }
+
+  // Lock everything by default
+  ["btnSetTrackType","btnCurseCheck","btnMutation","btnTargetCurse","btnMixCurse","btnPowerUp","btnNextRoom","trackTypeSelect"]
+    .forEach(id => { const el=document.getElementById(id); if(el) el.disabled = true; });
+
+  // Always allow Next Step + Clear Log
+  const ns = document.getElementById("nextStepBtn"); if (ns) ns.disabled = false;
+  const cl = document.getElementById("btnClearLog"); if (cl) cl.disabled = false;
+
+  switch(step){
+    case STEP.PICK_TRACK:
+      document.getElementById("trackTypeSelect").disabled = false;
+      document.getElementById("btnSetTrackType").disabled = false;
+      setHint('Choose a Track Type and click “Set Track Type” (or press “Next Step”).');
+      break;
+    case STEP.CURSE_CHECK:
+      document.getElementById("btnCurseCheck").disabled = false;
+      setHint('Roll “Curse Check”.');
+      break;
+    case STEP.TARGET_CURSE:
+      document.getElementById("btnTargetCurse").disabled = false;
+      setHint('Curse Check landed on Target Curse — roll “Target Curse”.');
+      break;
+    case STEP.MIX_CURSE:
+      document.getElementById("btnMixCurse").disabled = false;
+      setHint('Curse Check landed on Mix Curse — roll “Mix Curse”.');
+      break;
+    case STEP.MUTATION:
+      document.getElementById("btnMutation").disabled = false;
+      setHint('Roll “Mutation”.');
+      break;
+    case STEP.POWER_UP:
+      document.getElementById("btnPowerUp").disabled = false;
+      // Allow skipping straight to Next Room if you don’t want Power-Ups
+      document.getElementById("btnNextRoom").disabled = false;
+      setHint('Roll “Power-Up” (or press “Next Step” again / click “Next Room” to skip).');
+      break;
+    case STEP.NEXT_ROOM_READY:
+      document.getElementById("btnNextRoom").disabled = false;
+      setHint('Go to the next room.');
+      break;
+  }
+  updatePU();
+}
+
+function nextStep(){
+  if (!guidedOn()){
+    // In non-guided mode, Next Step just does Curse Check → Mutation → Power-Up if possible
+    if (!chosenTrackType){
+      setHint('Pick a Track Type first.');
+      return;
+    }
+    rollCurseCheck();
+    rollMutation();
+    rollPowerUp();
+    return;
+  }
+
+  switch(step){
+    case STEP.PICK_TRACK: {
+      const sel = document.getElementById("trackTypeSelect");
+      if (sel && sel.value && !chosenTrackType){
+        setTrackType();
+      } else if (chosenTrackType){
+        step = STEP.CURSE_CHECK;
+        applyGuidedLocks();
+      } else {
+        setHint('Choose a Track Type from the dropdown first.');
+      }
+      break;
+    }
+    case STEP.CURSE_CHECK: rollCurseCheck(); break;
+    case STEP.TARGET_CURSE: rollTargetCurse(); break;
+    case STEP.MIX_CURSE: rollMixCurse(); break;
+    case STEP.MUTATION: rollMutation(); break;
+    case STEP.POWER_UP: rollPowerUp(); break;
+    case STEP.NEXT_ROOM_READY: nextRoom(); break;
+  }
+}
+
+function d100(){ return Math.floor(Math.random()*100)+1; }
+function time(){ return new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit', second:'2-digit'}); }
+
+function writeResult(text, meta=""){
+  document.getElementById("result").textContent = text;
+  document.getElementById("meta").textContent = meta;
+  const log = document.getElementById("log");
+  log.textContent = `[${time()}] [Room ${room}] ${text}\n` + log.textContent;
+}
+
+function clearLog(){
+  document.getElementById("log").textContent="";
+  writeResult("Log cleared. Continue your run.");
+}
+
+function updatePU(){
+  document.getElementById("powerCount").textContent = powerUps;
+  document.getElementById("usePU").classList.toggle("disabled", powerUps<=0 || usedThisRoom);
+}
+function gainPowerUp(){ powerUps++; writeResult("Gained 1 Power-Up"); updatePU(); }
+function losePowerUp(){ powerUps = Math.max(0, powerUps-1); writeResult("Lost 1 Power-Up"); updatePU(); }
+function usePowerUp(){
+  if (powerUps<=0 || usedThisRoom) return;
+  powerUps--; usedThisRoom = true;
+  writeResult("Used a Power-Up (resolve effect manually per your rules)"); updatePU();
+}
+
+/* Track Types are CHOSEN (not rolled) */
+const TRACK_TYPES = [
+  "One-Shot Drums","Drum Loop","Percussion","Bass","Lead","Chord","Pad","Piano / Keys","Sample",
+  "FX or Texture","Arp / Sequence","Vocal / Voice","Acoustic Instrument","Electric Instrument","Player’s Choice"
+];
+
+function populateTrackTypes(){
+  const sel = document.getElementById("trackTypeSelect");
+  TRACK_TYPES.forEach(t => {
+    const opt = document.createElement("option");
+    opt.value = t;
+    opt.textContent = t;
+    sel.appendChild(opt);
+  });
+}
+
+function setTrackType(){
+  const sel = document.getElementById("trackTypeSelect");
+  if (!sel.value) return;
+  chosenTrackType = sel.value;
+  writeResult(`Track Type set: ${chosenTrackType}`);
+
+  if (guidedOn()){
+    step = STEP.CURSE_CHECK;
+    applyGuidedLocks();
+  }
+}
+
+/* Curse Check */
+function curseCheckLabel(r){
+  if (r<=70) return "No Curse";
+  if (r<=98) return "Target Curse";
+  return "Mix Curse";
+}
+
+const CURSE_CHECK_EXPLAIN = {
+  "No Curse": "You’re clear this step—no curse applies right now.",
+  "Target Curse": "A curse hits a specific track. Roll Target Curse, then apply it to the intended/active track (or whichever track your rules specify).",
+  "Mix Curse": "A curse hits the whole session/mix. Roll Mix Curse and apply it globally for the rest of the run (or as described)."
+};
+
+/* Mutations */
+const MUTATIONS = [
+  [1,2,"Sum Track to mono"], [3,4,"Track must be monophonic"], [5,6,"One octave / four slices only"],
+  [7,8,"Fixed velocity"], [9,10,"One-bar loop"], [11,12,"Beats 1 & 3 only"], [13,14,"Beats 2 & 4 only"],
+  [15,16,"Triplets only"], [17,18,"No quantize (perform live)"], [19,20,"Sample finalized track"],
+  [21,22,"Step sequencer only"], [23,24,"Record live; no edits"], [25,26,"No deletes/adjusts after finalize"],
+  [27,28,"Resample & chop on 51+"], [29,30,"Percussive envelopes"], [31,32,"One sound/note only"],
+  [33,34,"No repeated note/slice"], [35,36,"Strict order"], [37,38,"Each note repeats before new"],
+  [39,40,"No silence"], [41,42,"Pass through reverb before composing"], [43,44,"Pass through delay before composing"],
+  [45,46,"No effects"], [47,48,"Only one effect"], [49,50,"Sidechain to target"],
+  [51,52,"Noise gate"], [53,54,"Low-pass ~1kHz"], [55,56,"Detune ±10 cents"],
+  [57,58,"Pick sounds muted"], [59,60,"Finalize FX before sound choice"], [61,62,"Mute rhythms & metronome"],
+  [63,64,"Roll twice (two mutations)"], [65,66,"Only previously used effects"],
+  [67,68,"Deliberate wrong note"], [69,70,"No Mutation"], [71,72,"Abandon intended track type"],
+  [73,74,"Solo with metronome"], [75,76,"Only unused effects"], [77,78,"Volume locked after finalize"],
+  [79,82,"No Mutation"], [83,84,"Purpose matches previous room"], [85,86,"Repeat last mutation"],
+  [87,88,"Finalize in 3 minutes"], [89,90,"Same note count as target"],
+  [91,92,"Compose muted"], [93,94,"Delete one note from another track per note"],
+  [95,96,"Roll Target Curse (no mutation)"], [97,98,"Commit first take"], [99,100,"80+ delete track"]
+];
+
+const MUTATION_EXPLAIN = {
+  "Sum Track to mono": "Collapse the track to mono. In practice: set the channel to mono or bounce it mono.",
+  "Track must be monophonic": "Only one note at a time—no chords/overlaps. If it’s audio slices, avoid overlaps.",
+  "One octave / four slices only": "Limit pitch range to one octave (MIDI) or only four unique sample slices.",
+  "Fixed velocity": "All MIDI velocities stay the same (pick one value and keep it).",
+  "One-bar loop": "Your material must loop cleanly within one bar.",
+  "Beats 1 & 3 only": "Place hits/notes only on beats 1 and 3 (subdivisions off-limits unless your rules allow).",
+  "Beats 2 & 4 only": "Place hits/notes only on beats 2 and 4.",
+  "Triplets only": "Use triplet grid/subdivision for rhythmic placement.",
+  "No quantize (perform live)": "Record/perform it live and don’t quantize afterward.",
+  "Sample finalized track": "Bounce/print the current track and use that audio as a new sample source.",
+  "Step sequencer only": "Program using a step sequencer approach, not freehand MIDI drawing.",
+  "Record live; no edits": "Record and keep it. You can do multiple takes, but don’t edit the chosen take.",
+  "No deletes/adjusts after finalize": "Once you finalize that track, you cannot tweak or delete content on it.",
+  "Resample & chop on 51+": "If your next d100 roll is 51 or higher, you must resample and chop the result.",
+  "Percussive envelopes": "Use short, percussive envelopes (fast attack, short decay) even for melodic sounds.",
+  "One sound/note only": "Use a single sound source or a single pitch for the whole track.",
+  "No repeated note/slice": "No repeating the same MIDI note or sample slice consecutively.",
+  "Strict order": "Work in a strict sequence (e.g., left-to-right in the timeline) without jumping around.",
+  "Each note repeats before new": "Repeat each note/hit at least once before introducing a new one.",
+  "No silence": "Keep it continuous—no gaps. Fill space with sustained notes/noise/texture if needed.",
+  "Pass through reverb before composing": "Put reverb on first, then compose into it (commit to the space).",
+  "Pass through delay before composing": "Put delay on first, then compose into it.",
+  "No effects": "No FX on that track.",
+  "Only one effect": "You may use exactly one effect on the track.",
+  "Sidechain to target": "Sidechain this track to the target track (or your chosen anchor track).",
+  "Noise gate": "Gate the track so it chops/ducks based on threshold.",
+  "Low-pass ~1kHz": "Apply a low-pass filter roughly around 1kHz.",
+  "Detune ±10 cents": "Detune the main source by around 10 cents up or down.",
+  "Pick sounds muted": "Choose sounds while monitoring quietly (or with very low volume) to force intuition.",
+  "Finalize FX before sound choice": "Lock in your effect chain first, then choose the sound to run through it.",
+  "Mute rhythms & metronome": "Create without hearing drums/metronome.",
+  "Roll twice (two mutations)": "Roll another mutation and apply both (unless one says No Mutation).",
+  "Only previously used effects": "You can only use effects you’ve already used earlier in the run.",
+  "Deliberate wrong note": "Intentionally place a 'wrong' note or unexpected slice to create tension.",
+  "No Mutation": "Nothing changes this step.",
+  "Abandon intended track type": "Switch to a different track purpose than you planned.",
+  "Solo with metronome": "Work on the track soloed with a metronome (no other tracks audible).",
+  "Only unused effects": "You may only use effects you have NOT used yet in the run.",
+  "Volume locked after finalize": "Once you finalize the track, you can’t change its volume.",
+  "Purpose matches previous room": "Make this room’s track serve the same role as the previous room’s track.",
+  "Repeat last mutation": "Apply the last mutation again.",
+  "Finalize in 3 minutes": "Set a 3-minute timer. When it’s up, finalize the track.",
+  "Same note count as target": "Match the number of notes/hits of the target track (count them).",
+  "Compose muted": "Write/arrange with the channel muted, then unmute to reveal the result.",
+  "Delete one note from another track per note": "For every note you add here, delete one note somewhere else (pick another track).",
+  "Roll Target Curse (no mutation)": "Skip mutation—roll a Target Curse instead and apply it.",
+  "Commit first take": "First take is the take. No re-recording.",
+  "80+ delete track": "If your mutation roll was 80 or higher, delete the track entirely."
+};
+
+/* Target Curses */
+const TARGET_CURSES = [
+  [1,4,"Mute until end of run"], [5,8,"Collapse to mono"], [9,12,"Delete every third note"],
+  [13,16,"Pan hard L/R"], [17,20,"Must remain constant in arrangement"],
+  [21,24,"Resample/Chop/Reverse/Re-sequence"], [25,28,"Pitch shift one octave"],
+  [29,32,"Flanger or Chorus"], [33,36,"Force next Room (two mutations)"],
+  [37,40,"Turn down -6 dB"], [41,44,"Strip all effects"], [45,48,"All future curses target this track"],
+  [49,52,"Over-compress"], [53,56,"Force extra Room on 51+"],
+  [57,60,"Delete track (role cannot be replaced)"], [61,64,"No resequencing or volume change"],
+  [65,68,"Remove half the notes"], [69,72,"Loop short segment"],
+  [73,76,"Erase all but first & last"], [77,80,"Cannot loop back-to-back"],
+  [81,84,"Delete first bar"], [85,88,"Delete last bar"], [89,92,"Cannot edit rest of run"],
+  [93,96,"Apply last curse again"], [97,100,"Re-roll twice"]
+];
+
+const TARGET_CURSE_EXPLAIN = {
+  "Mute until end of run": "Mute this track and keep it muted for the rest of the run.",
+  "Collapse to mono": "Make this track mono (bounce or set to mono).",
+  "Delete every third note": "Count notes/hits and delete every 3rd one.",
+  "Pan hard L/R": "Hard-pan the track left or right.",
+  "Must remain constant in arrangement": "No automation or arrangement changes—keep it consistent throughout.",
+  "Resample/Chop/Reverse/Re-sequence": "Bounce the track, chop it, reverse parts, and re-sequence the pieces.",
+  "Pitch shift one octave": "Shift the entire track up or down one octave.",
+  "Flanger or Chorus": "Add either flanger or chorus to the track (commit to it).",
+  "Force next Room (two mutations)": "Immediately go to the next room and apply two mutations there.",
+  "Turn down -6 dB": "Lower track gain by 6 dB and keep it there.",
+  "Strip all effects": "Remove all effects from the track.",
+  "All future curses target this track": "Whenever a curse targets a track later, it must target this one.",
+  "Over-compress": "Apply heavy compression (obvious pumping is okay).",
+  "Force extra Room on 51+": "If your next d100 is 51 or higher, you must do an extra room.",
+  "Delete track (role cannot be replaced)": "Remove the track and do not replace its function in the arrangement.",
+  "No resequencing or volume change": "No moving notes/slices AND no volume change for the rest of the run.",
+  "Remove half the notes": "Delete roughly half the notes/hits (your choice which).",
+  "Loop short segment": "Pick a short slice/segment and loop it (make it work musically).",
+  "Erase all but first & last": "Keep only the first and last element; delete everything between.",
+  "Cannot loop back-to-back": "No repeating the same loop consecutively in the arrangement.",
+  "Delete first bar": "Remove the first bar of the track.",
+  "Delete last bar": "Remove the last bar of the track.",
+  "Cannot edit rest of run": "Lock this track for the remainder—no edits.",
+  "Apply last curse again": "Repeat the most recent curse effect.",
+  "Re-roll twice": "Roll two more Target Curses and apply both (or follow your stacking rules)."
+};
+
+/* Mix Curses */
+const MIX_CURSES = [
+  [1,1,"This is the last Room"], [2,7,"Delay on entire mix"], [8,14,"No quantize rest of run"],
+  [15,21,"1/32 quantize rest of run"], [22,28,"-10 BPM"], [29,35,"+10 BPM"],
+  [36,42,"Delete a previous track each new Room"], [43,49,"Resample entire mix; delete others"],
+  [50,56,"All future track types same category"], [57,63,"Roll a track type; all future are that"],
+  [64,70,"No volume changes on previous tracks"], [71,77,"No automation"],
+  [78,84,"Mix summed to mono"], [85,91,"Only previously used effects"],
+  [92,100,"Roll three Target Curses"]
+];
+
+const MIX_CURSE_EXPLAIN = {
+  "This is the last Room": "End the run after this room—finalize and stop adding rooms.",
+  "Delay on entire mix": "Put delay on the master/mix bus.",
+  "No quantize rest of run": "No quantizing for the remainder of the run.",
+  "1/32 quantize rest of run": "Quantize everything to 1/32 for the rest of the run.",
+  "-10 BPM": "Lower the project tempo by 10 BPM.",
+  "+10 BPM": "Raise the project tempo by 10 BPM.",
+  "Delete a previous track each new Room": "Each time you enter a new room, delete one earlier track.",
+  "Resample entire mix; delete others": "Bounce the whole mix to audio, then delete the individual tracks.",
+  "All future track types same category": "Every future track you create must be the same general category/role.",
+  "Roll a track type; all future are that": "Pick a track type now (your choice) and all future tracks follow it.",
+  "No volume changes on previous tracks": "Lock levels on existing tracks; no fader moves.",
+  "No automation": "No automation lanes for the rest of the run.",
+  "Mix summed to mono": "Sum the master to mono.",
+  "Only previously used effects": "From now on, only use effects you have already used earlier.",
+  "Roll three Target Curses": "Roll/apply three Target Curses across tracks (follow your distribution rules)."
+};
+
+/* Power-Up */
+function powerUpLabel(r){
+  if (r<=75) return "No Power-Up";
+  if (r<=85) return "Gain 1 Power-Up";
+  if (r<=97) return "Gain 1 Power-Up (use next Room or lose it)";
+  return "Gain 2 Power-Ups";
+}
+
+function lookup(table, r){
+  const row = table.find(([a,b])=>r>=a && r<=b);
+  return row ? row[2] : "—";
+}
+
+/* Explain panel helpers */
+function setExplain(which, title, text, tag, nextStep){
+  const el = document.getElementById(which);
+  const pill = tag ? ` <span class="pill">${tag}</span>` : "";
+  const next = nextStep ? `<p style="margin-top:10px;"><strong>Next:</strong> ${nextStep}</p>` : "";
+  el.innerHTML = `
+    <p><strong>${title}</strong>${pill}</p>
+    <p style="margin-top:6px;">${text}</p>
+    ${next}
+  `;
+}
+
+function rollCurseCheck(){
+  const r = d100();
+  const label = curseCheckLabel(r);
+  lastCurseCheck = label;
+
+  writeResult(`Curse Check: ${label}`, `d100=${r}`);
+  setExplain(
+    "curseExplain",
+    "Curse Check",
+    CURSE_CHECK_EXPLAIN[label] || "Apply per your rules.",
+    "Curse Check",
+    (label==="No Curse" ? "Roll a Mutation for this Room." : (label==="Target Curse" ? "Roll a Target Curse next." : "Roll a Mix Curse next."))
+  );
+
+  if (guidedOn()){
+    step = (label==="No Curse") ? STEP.MUTATION : (label==="Target Curse" ? STEP.TARGET_CURSE : STEP.MIX_CURSE);
+    applyGuidedLocks();
+  }
+}
+
+function rollMutation(){
+  const r = d100();
+  const label = lookup(MUTATIONS, r);
+  writeResult(`Mutation: ${label}`, `d100=${r}`);
+
+  // Special: mutation instructs a Target Curse instead
+  if (label === "Roll Target Curse (no mutation)") {
+    setExplain(
+      "mutationExplain",
+      "Mutation",
+      (MUTATION_EXPLAIN[label] || "Roll a Target Curse instead."),
+      "Mutation",
+      "Roll a Target Curse now."
+    );
+    if (guidedOn()){
+      step = STEP.TARGET_CURSE;
+      applyGuidedLocks();
+    }
+    return;
+  }
+
+  // Normal mutation explanation
+  setExplain(
+    "mutationExplain",
+    "Mutation",
+    (MUTATION_EXPLAIN[label] || "Apply this constraint as written."),
+    "Mutation",
+    "Build your Room’s track under this constraint, then roll (optional) Power-Up."
+  );
+
+  // If roll-twice, auto-roll second and show both
+  if (label === "Roll twice (two mutations)") {
+    const r2 = d100();
+    const label2 = lookup(MUTATIONS, r2);
+    writeResult(`Mutation (2nd): ${label2}`, `d100=${r} then d100=${r2}`);
+    const txt2 = (MUTATION_EXPLAIN[label2] || "Apply this constraint as written.");
+    setExplain(
+      "mutationExplain",
+      "Mutation (two results)",
+      `${MUTATION_EXPLAIN[label] || ""}<br><br><strong>Second mutation:</strong> ${label2}. ${txt2}`,
+      "Mutation",
+      "Build your Room’s track under both constraints, then roll (optional) Power-Up."
+    );
+  }
+
+  if (guidedOn()){
+    step = STEP.POWER_UP;
+    applyGuidedLocks();
+  }
+}
+
+function rollTargetCurse(){
+  const r = d100();
+  const label = lookup(TARGET_CURSES, r);
+  writeResult(`Target Curse: ${label}`, `d100=${r}`);
+  setExplain(
+    "curseExplain",
+    "Target Curse",
+    (TARGET_CURSE_EXPLAIN[label] || "Apply to a specific track per your rules."),
+    "Target Curse",
+    "Apply to the intended track (or the most recent track), then roll Mutation."
+  );
+
+  if (guidedOn()){
+    step = STEP.MUTATION;
+    applyGuidedLocks();
+  }
+}
+
+function rollMixCurse(){
+  const r = d100();
+  const label = lookup(MIX_CURSES, r);
+  writeResult(`Mix Curse: ${label}`, `d100=${r}`);
+  setExplain(
+    "curseExplain",
+    "Mix Curse",
+    (MIX_CURSE_EXPLAIN[label] || "Apply globally per your rules."),
+    "Mix Curse",
+    "This affects the whole session—apply it, then roll Mutation."
+  );
+
+  if (guidedOn()){
+    step = STEP.MUTATION;
+    applyGuidedLocks();
+  }
+}
+
+function rollPowerUp(){
+  const r = d100();
+  const label = powerUpLabel(r);
+  writeResult(`Power-Up: ${label}`, `d100=${r}`);
+  if (label.startsWith("Gain 1")) powerUps += 1;
+  if (label.startsWith("Gain 2")) powerUps += 2;
+  updatePU();
+
+  if (guidedOn()){
+    step = STEP.NEXT_ROOM_READY;
+    applyGuidedLocks();
+  }
+}
+
+function nextRoom(){
+  room++;
+  usedThisRoom = false;
+  chosenTrackType = "";
+
+  // Reset dropdown to placeholder if present
+  const sel = document.getElementById("trackTypeSelect");
+  if (sel) sel.selectedIndex = 0;
+
+  writeResult(`Entered Room ${room}. Choose Track Type, then roll Curse Check and Mutation.`);
+  updatePU();
+
+  if (guidedOn()){
+    step = STEP.PICK_TRACK;
+    applyGuidedLocks();
+  }
+}
+
+/* Rules Reference Rendering */
+function esc(s){
+  return String(s).replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;");
+}
+function rangeLabel(a,b){
+  return a===b ? `${a}` : `${a}–${b}`;
+}
+function renderRulesReference(){
+  // Curse Check
+  const cc = document.getElementById("rulesCurseCheck");
+  if (cc){
+    cc.innerHTML = `
+      <ul style="margin:6px 0 0 18px;">
+        <li><strong>No Curse</strong> (d100 1–70): ${esc(CURSE_CHECK_EXPLAIN["No Curse"])}</li>
+        <li><strong>Target Curse</strong> (d100 71–98): ${esc(CURSE_CHECK_EXPLAIN["Target Curse"])}</li>
+        <li><strong>Mix Curse</strong> (d100 99–100): ${esc(CURSE_CHECK_EXPLAIN["Mix Curse"])}</li>
+      </ul>
+    `;
+  }
+
+  // Mutations
+  const m = document.getElementById("rulesMutations");
+  if (m){
+    const rows = MUTATIONS.map(([a,b,name])=>{
+      const exp = MUTATION_EXPLAIN[name] || "Apply this constraint as written.";
+      return `<li><strong>${rangeLabel(a,b)}</strong>: ${esc(name)} — ${esc(exp)}</li>`;
+    }).join("");
+    m.innerHTML = `<ul style="margin:6px 0 0 18px;">${rows}</ul>`;
+  }
+
+  // Target Curses
+  const tc = document.getElementById("rulesTargetCurses");
+  if (tc){
+    const rows = TARGET_CURSES.map(([a,b,name])=>{
+      const exp = TARGET_CURSE_EXPLAIN[name] || "Apply to a specific track per your rules.";
+      return `<li><strong>${rangeLabel(a,b)}</strong>: ${esc(name)} — ${esc(exp)}</li>`;
+    }).join("");
+    tc.innerHTML = `<ul style="margin:6px 0 0 18px;">${rows}</ul>`;
+  }
+
+  // Mix Curses
+  const mc = document.getElementById("rulesMixCurses");
+  if (mc){
+    const rows = MIX_CURSES.map(([a,b,name])=>{
+      const exp = MIX_CURSE_EXPLAIN[name] || "Apply globally per your rules.";
+      return `<li><strong>${rangeLabel(a,b)}</strong>: ${esc(name)} — ${esc(exp)}</li>`;
+    }).join("");
+    mc.innerHTML = `<ul style="margin:6px 0 0 18px;">${rows}</ul>`;
+  }
+}
+
+// Init
+populateTrackTypes();
+renderRulesReference();
+updatePU();
+
+// Guided mode init
+const g = document.getElementById('guidedToggle');
+if (g) g.addEventListener('change', applyGuidedLocks);
+applyGuidedLocks();
+</script>
+</body>
+</html>
